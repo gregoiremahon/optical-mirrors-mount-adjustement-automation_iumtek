@@ -7,7 +7,15 @@ BusOut motor_out(D2, D3, D5, D6);
 BusOut motor_out2(D8, D9, D14, D15);  // blue - pink - yellow - orange // PWM
 
 
-DigitalOut myled(LED2);
+////// Entrées analogiques de la carte NUCLEO F446RE -- Sorties de la photodiode quatre quadrants /////////
+AnalogIn AnaIn1(A1); 
+AnalogIn AnaIn2(A2);
+AnalogIn AnaIn3(A3);
+AnalogIn AnaIn4(A4);
+
+DigitalOut myled(LED2); // Led2 de la carte NUCLEO F446 -- Clignote lors d'un changement d'état du moteur
+
+
 bool dir; // direction
 int step_motor1 = 0;
 int nbTour = 0;
@@ -20,30 +28,30 @@ float Az = 4;
 float Bz = 4;
 float Cz = 4;
 float Dz = 4;
-float A;
-float B;
-float C;
-float D;
+float A = AnaIn1; // Valeurs de sortie de chacun des quatre quadrants de la photodiode reliées aux entrées analogiques de la carte
+float B = AnaIn2;
+float C = AnaIn3;
+float D = AnaIn4;
 
 int i;
 
 const int kMaxBufferSize = 100000;
 char      buffer[kMaxBufferSize];
 int       len = 0;
-long int Steps;//val en pourcent
-int ValRecue;
+long int Steps;// Nombre de pas des moteurs
+int ValRecue; 
 long int ValDeg;
-int StepDeg = 0.087890625;
+int StepDeg = 0.087890625; // Valeur d'un pas en degré de rotation
 
 void motorsOn()
 {
-    switch(step_motor1) {
+    switch(step_motor1) { // Switch des différents états possible des moteurs
         case 0:
             motor_out = 0x1;
             motor_out2 = 0x1;
             flag_isr = true;
             arretMoteur = false;
-            wait_ms(1);
+            wait_ms(1); // Attente entre chaque variation de pas --> A modifier pour faire varier la vitesse en fonction du couple souhaité par exemple
             break;  // 0001
 
 
@@ -131,34 +139,34 @@ void motorsOn()
             Count = 0; // Remise à 0 du compteur de pas à la fin de la commande.
         }
         if(bTour == true) {
-            pc.printf("\nDone...\n");
+            pc.printf("\nDone...\n"); // Affichage d'un message de confirmation de fin de commande sur le pc
             bTour = false;
         }
 
         if(step_motor1>7)step_motor1=0; // Boucle du switch(case)
         if(step_motor1<0)step_motor1=7;
 
-        if(dir == false) step_motor1++; // Demi tour à chaque changement d'état de "dir"
+        if(dir == false) step_motor1++; // Demi tour à chaque changement d'état de "dir" --> Changement de sens de rotation des moteurs
         if (dir == true) step_motor1--;
     }
 }
 void degresCalc()
 {
-    ValDeg = (0.08789062*Steps);
+    ValDeg = (0.08789062*Steps); // Calcul de la valeur en degré de la rotation à effectuer en fonction du nombre de pas 
     if (Steps==4096) ValDeg = 360;
 }
 
 
-float Calculx(float A, float B, float C, float D)
+float Calculx(float A, float B, float C, float D) // Fonction de calcul des coordonnées du faisceau laser en fonction des valeurs de sortie de la photodiode
 {
 
     float res =(((B+D) - (A+C)) / (A+B+C+D));
     return res;
 }
 
-void updateABCD() // update valeurs photodiode
+void updateABCD() // update valeurs photodiode // Lectures entrées analogiques
 {
-    int xz = Calculx(Az, Bz, Cz, Dz);
+    int xz = Calculx(Az, Bz, Cz, Dz); // Calcul de la valeur de xz = coordonnées cible du faisceau laser
     A = (Az*(1+((-1)^i)*4/(i+1)));
     B = (Bz*(1-((-1)^i)*4/(i+1)));
     C = (Cz*(1+((-1)^i)*4/(i+1)));
@@ -168,22 +176,30 @@ void updateABCD() // update valeurs photodiode
 void Algo()
 {
     i = 0;
-    float xz = (((Bz+Dz) - (Az+Cz))/(Az+Bz+Cz+Dz));
+    float xz = (((Bz+Dz) - (Az+Cz))/(Az+Bz+Cz+Dz)); // xz = coordonnées cible à atteindre 
     int nbPas = 2048; // nombre de pas initial
-    updateABCD();
-    float x = Calculx(A, B, C, D);
-    bool dir0 = ((x-xz)>0);
+    updateABCD(); // Mise à jour des coordonnées avec la lecture des valeurs de tension des 4 sorties de la photodiode
+    float x = Calculx(A, B, C, D); // x = coordonnées du faisceau laser sur la photodiode en fonction des valeurs de sortie de la photodiode
+    bool dir0 = ((x-xz)>0); // dir0 prend le booléen de la différence entre le calcul de x actuel et la valeur de x à atteindre
 
-    float Epsilon = 1/1000;
-    while(((abs(x-xz)) > Epsilon)&& i < 100000000) {
-        dir = dir0;
-        Steps = nbPas;
-        motorsOn();
-        updateABCD();
-        Calculx(A, B, C, D);
-        dir0 = (x-xz)>0;
+    float Epsilon = 1/1000; // Précision souhaitée dans la différence entre la position actuelle du faisceau laser et la position cible initiale
+    
+    while(((abs(x-xz)) > Epsilon)&& i < 100000000) { // boucle d'asservissement de la position du faisceau laser sur la photodiode
+    
+        dir = dir0; // La direction de rotation des moteurs prend le booléen de dir0
+        
+        Steps = nbPas; // le nombre de pas des moteurs prend la valeur du nombre de pas souhaité dans la boucle
+        
+        motorsOn(); // Démarrage et rotation des moteurs
+        
+        updateABCD(); // Actualisation de la position du faisceau laser sur la photodiode en actualisant le relevé des valeurs de sortie de la photodiode
+        
+        Calculx(A, B, C, D); // Calcul de la formule de x pour les nouvelles valeurs de sortie de la photodiode
+        
+        dir0 = (x-xz)>0; // Définition du sens de rotation des moteurs en fonction de la valeur des coordonnées du faisceau laser et des coordonnées à atteindre
+        
         if (dir != dir0) {
-            nbPas = nbPas/2;
+            nbPas = nbPas/2; // Division du nombre de pas par deux à chaque fois que le sens de rotation des moteurs varie
         }
         i++;
     }
@@ -194,14 +210,13 @@ void Algo()
 
 int main()
 {
-    pc.baud(921600);
+    pc.baud(921600); // Baudrate de la liaison série (utiliser Tera Term...)
 
     // buffer[0] = '\0';
     // pc.printf("Start...\nHow many steps ? (Number of steps + $)\n");
-    //  Calculx();
-    Algo();
-    while (1) {
 
+    Algo(); // Execution de la fonction d'algorithme
+    while (1) {
     }
 
 }
