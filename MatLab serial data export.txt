@@ -1,0 +1,25 @@
+clear serialportObj;
+data=cellstr(serialport_data1);
+newdata = cellfun(@(x) strsplit(x, '\n'), data, 'UniformOutput', false);
+str=newdata{1,1};
+str(1)=[];
+valeurs= cellfun(@str2num,str);
+A = valeurs(1:6:end) ;
+B = valeurs(2:6:end) ;
+C = valeurs(3:6:end) ;
+D = valeurs(4:6:end) ;
+x = valeurs(5:6:end) ;
+y = valeurs(6:6:end) ;
+LA(1)=mean(A); LA(2)=std(A);
+LB(1)=mean(B); LB(2)=std(B);
+LC(1)=mean(C); LC(2)=std(C);
+LD(1)=mean(D); LD(2)=std(D);
+Lx(1)=mean(x); Lx(2)=std(x);
+Ly(1)=mean(y); Ly(2)=std(y);
+LA
+LB
+LC 
+LD 
+Lx
+Ly
+length(A)
